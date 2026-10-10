@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:dart_console/dart_console.dart';
 import 'package:secrets_keeper/secret.dart';
 
+const vaultPath = 'vault.json';
 final console = Console();
 
 void render(List<Secret> items, int selected, String message) {
@@ -58,6 +60,8 @@ Secret? askNewSecret() {
   return Secret(name, value);
 }
 
+// kto suda zachol tot gay
+
 Future<void> copyToClipboard(String value) async {
   final process = await Process.start('clip', []);
   process.stdin.write(value);
@@ -65,11 +69,39 @@ Future<void> copyToClipboard(String value) async {
   await process.exitCode;
 }
 
+Future<List<Secret>> loadSecrets() async {
+  final file = File(vaultPath);
+  if (await file.exists()) {
+    final content = await file.readAsString();
+    final data = jsonDecode(content) as List;
+    return data.map((item) => Secret.fromJson(item)).toList();
+  } else {
+    return [];
+  }
+}
+
+Future<void> saveSecrets(List<Secret> items) async {
+  final file = File(vaultPath);
+
+  final allSecrets = jsonEncode(items.map((item) => item.toJson()).toList());
+  await file.writeAsString(allSecrets);
+}
+
+// ya uzhe krasnyi
+
+bool confirm(String question) {
+  console.write("$question (y/n): ");
+  final key = console.readKey();
+  return !key.isControl && key.char == "y";
+}
+
 Future<void> main() async {
   console.hideCursor();
-  List<Secret> items = [];
+
+  List<Secret> items = await loadSecrets();
   var selected = 0;
   var message = '';
+
   try {
     while (true) {
       render(items, selected, message);
@@ -86,10 +118,17 @@ Future<void> main() async {
               selected++;
             }
           case ControlCharacter.delete || ControlCharacter.backspace:
-            final (newSelected, removed) = deleteSelected(items, selected);
-            selected = newSelected;
-            if (removed != null) {
-              message = 'Удалено: ${removed.name}';
+            if (items.isNotEmpty &&
+                confirm("Удалить ${items[selected].name}?")) {
+              final (newSelected, removed) = deleteSelected(items, selected);
+              selected = newSelected;
+
+              if (removed != null) {
+                message = 'Удалено: ${removed.name}';
+                await saveSecrets(items);
+              }
+            } else {
+              message = "Удаление отменено";
             }
           case ControlCharacter.enter:
             if (items.isNotEmpty) {
@@ -108,6 +147,7 @@ Future<void> main() async {
             selected = newSelected;
             if (removed != null) {
               message = 'Удалено: ${removed.name}';
+              await saveSecrets(items);
             }
 
           case "a" || "ф":
@@ -117,6 +157,7 @@ Future<void> main() async {
             } else {
               items.add(secret);
               message = "Добавлено: ${secret.name}";
+              await saveSecrets(items);
             }
 
           case "q" || "й":
