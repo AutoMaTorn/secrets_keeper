@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dart_console/dart_console.dart';
 import 'package:secrets_keeper/secret.dart';
 
@@ -41,13 +43,14 @@ Secret? askNewSecret() {
 
   console.write("Название: ");
   final name = console.readLine()?.trim();
-  console.hideCursor();
   if (name == null || name.isEmpty) {
+    console.hideCursor();
     return null;
   }
 
   console.write("Значение: ");
   final value = console.readLine()?.trim();
+  console.hideCursor();
   if (value == null || value.isEmpty) {
     return null;
   }
@@ -55,7 +58,14 @@ Secret? askNewSecret() {
   return Secret(name, value);
 }
 
-void main() {
+Future<void> copyToClipboard(String value) async {
+  final process = await Process.start('clip', []);
+  process.stdin.write(value);
+  await process.stdin.close();
+  await process.exitCode;
+}
+
+Future<void> main() async {
   console.hideCursor();
   List<Secret> items = [];
   var selected = 0;
@@ -79,17 +89,17 @@ void main() {
             final (newSelected, removed) = deleteSelected(items, selected);
             selected = newSelected;
             if (removed != null) {
-              message = 'Удалено: $removed';
+              message = 'Удалено: ${removed.name}';
             }
           case ControlCharacter.enter:
             if (items.isNotEmpty) {
-              console.hideCursor();
-              message = "Выбрано: ${items[selected].name}";
+              await copyToClipboard(items[selected].value);
+              message = "Скопировано: ${items[selected].name}";
             }
-          case ControlCharacter.escape:
+          case ControlCharacter.ctrlC:
             return;
           default:
-            message = 'Управляющая: ${key.controlChar}';
+            break;
         }
       } else {
         switch (key.char) {
@@ -106,13 +116,13 @@ void main() {
               message = "Добавление отменено";
             } else {
               items.add(secret);
-              print("Добавлено: ${secret.name}");
+              message = "Добавлено: ${secret.name}";
             }
 
           case "q" || "й":
             return;
           default:
-            message = 'Символ: "${key.char}" коды: ${key.char.codeUnits}';
+            break;
         }
       }
     }
