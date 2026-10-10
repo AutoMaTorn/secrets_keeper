@@ -2,4 +2,4 @@
 
 .dart_tool/
 vault.json
-.exe
+*.exe
