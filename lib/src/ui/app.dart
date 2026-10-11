@@ -42,10 +42,12 @@ Future<void> runApp() async {
           case ControlCharacter.enter:
             final current = state.current;
             if (current != null) {
-              final ok = await copyToClipboard(current.value);
-              state.message = ok
-                  ? 'Скопиравано: ${current.name}'
-                  : 'Не удалось скопировать. На линух надо xclip или wl-copy';
+              final result = await copyToClipboard(current.value);
+              state.message = switch (result) {
+                CopyResult.copied => 'Скопировано: ${current.name}',
+                CopyResult.sentToTerminal =>
+                  'Отправлено в терминал. Если не вставляется — установите xclip или wl-copy',
+              };
             }
           case ControlCharacter.ctrlC:
             return;
