@@ -3,52 +3,64 @@ import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 
 Future<void> main() async {
-  final message = 'Какой то пароль';
+  final password = "Password";
+  final aes = AesGcm.with256bits();
 
-  // инициализация алгоритма шифрования
-  final algorithm = AesGcm.with256bits();
+  // сохранение
+  final salt = SecretKeyData.random(length: 16).bytes;
+  final secretKey = await deriveKeyFromPasswordArgon2(password, salt);
 
-  // создание случайного секретного ключа шифрования
-  final secretKey = await algorithm.newSecretKey();
-
-  // генерируем случайный вектор инициализации / Nonce
-  // AES-GCM требует уникальный IV для каждой операции шифрования
-  // final nonce = algorithm.newNonce();
-
-  // дальше само шифрование
-  final clearTextBytes = utf8.encode(message);
-
-  final secretBox = await algorithm.encrypt(
-    clearTextBytes,
+  final box = await aes.encrypt(
+    utf8.encode("Секретные данные"),
     secretKey: secretKey,
   );
 
-  print(secretBox.cipherText);
-  print(secretBox.mac.bytes);
-  print(secretBox.nonce);
+  final json = jsonEncode({
+    'version': 1,
+    'salt': base64Encode(salt),
+    'nonce': base64Encode(box.nonce),
+    'cipherText': base64Encode(box.cipherText),
+    'mac': base64Encode(box.mac.bytes),
+  });
 
-  final afterDecpypt = await algorithm.decrypt(secretBox, secretKey: secretKey);
-  final withBytes = utf8.decode(afterDecpypt);
-  print(withBytes);
+  print('В файл пойдёт:');
+  print(json);
+
+  // загрузка
+  final data = jsonDecode(json) as Map<String, dynamic>;
+
+  final loadedSalt = base64Decode(data['salt']);
+  final loadedBox = SecretBox(
+    base64Decode(data['cipherText']),
+    nonce: base64Decode(data['nonce']),
+    mac: Mac(base64Decode(data['mac'])),
+  );
+
+  final loadedKey = await deriveKeyFromPasswordArgon2(password, loadedSalt);
 
   try {
-    final list = secretBox.cipherText.toList();
-
-    list[10] = 1;
-
-    final broken = SecretBox(list, nonce: secretBox.nonce, mac: secretBox.mac);
-
-    print(broken.cipherText);
-    print(broken.mac.bytes);
-    print(broken.nonce);
-
-    final afterDecpyptBroken = await algorithm.decrypt(
-      broken,
-      secretKey: secretKey,
-    );
-    final withBytesBroken = utf8.decode(afterDecpyptBroken);
-    print(withBytesBroken);
+    final clearBytes = await aes.decrypt(loadedBox, secretKey: loadedKey);
+    print('Расшифровано: ${utf8.decode(clearBytes)}');
   } on SecretBoxAuthenticationError {
-    print('Данные повреждены или неверный ключ');
+    print('Неверный пароль или файл поврежден');
   }
+}
+
+Future<SecretKey> deriveKeyFromPasswordArgon2(
+  String password,
+  List<int> salt,
+) async {
+  final algorithm = Argon2id(
+    memory: 19456, // Выделяемая память в КБ (~19 МБ по OWASP)
+    parallelism: 1, // Количество потоков
+    iterations: 2, // Количество проходов
+    hashLength: 32, // Длина ключа в байтах (32 байта = 256 бит)
+  );
+
+  final SecretKey derivedKey = await algorithm.deriveKeyFromPassword(
+    password: password,
+    nonce: salt,
+  );
+
+  return derivedKey;
 }
