@@ -1,6 +1,4 @@
-import 'dart:io';
-import 'dart:vmservice_io';
-
+import 'package:cryptography/cryptography.dart';
 import 'package:dart_console/dart_console.dart';
 import 'package:secrets_keeper/src/clipboard.dart';
 import 'package:secrets_keeper/src/crypto.dart';
@@ -17,16 +15,34 @@ Future<(VaultKey, List<Secret>)?> _unlock() async {
     console.writeLine('Создаю хранилище...');
     final vk = await createVaultKey(password);
     await saveSecrets([], vk);
-    return (vk, []);
+    return (vk, <Secret>[]);
+  } else {
+    final content = await readVaultFile();
+    final salt = readSalt(content);
+
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      final password = _askPassword();
+      console.writeLine("Открываю хранилище");
+      final vk = await openVaultKey(password, salt);
+
+      try {
+        final items = await loadSecrets(vk);
+        return (vk, items);
+      } on SecretBoxAuthenticationError {
+        console.writeLine("Неверный пароль...");
+      }
+    }
+
+    return null;
   }
 }
 
 String _askNewPassword() {
   while (true) {
-    console.write("Придумайте мастер пароль");
+    console.write("Придумайте мастер пароль: ");
     final first = console.readLine()?.trim() ?? '';
     if (first.isEmpty) {
-      console.writeLine('Пароль не может быть пустым');
+      console.writeLine("Пароль не может быть пустым");
       continue;
     }
 
@@ -35,7 +51,19 @@ String _askNewPassword() {
     if (first == second) {
       return first;
     }
-    console.writeLine('Пароли не совпадают, попробуйте еще раз');
+    console.writeLine("Пароли не совпадают, попробуйте еще раз");
+  }
+}
+
+String _askPassword() {
+  while (true) {
+    console.write("Введите мастер пароль: ");
+    final master = console.readLine()?.trim() ?? '';
+    if (master.isEmpty) {
+      console.writeLine("Пароль не может быть пустым");
+      continue;
+    }
+    return master;
   }
 }
 
@@ -47,13 +75,21 @@ Future<void> deleteWithConfirm(AppState state) async {
   }
   state.deleteSelected();
   state.message = 'Удалено: ${current.name}';
-  await saveSecrets(state.items);
+  await saveSecrets(state.items, state.vk);
 }
 
 Future<void> runApp() async {
+  final unlocked = await _unlock();
+
+  if (unlocked == null) {
+    console.writeLine("Не удалось открыть хранилище");
+    return;
+  }
+  final (vk, items) = unlocked;
+
   console.hideCursor();
 
-  final state = AppState(await loadSecrets(vk));
+  final state = AppState(items, vk);
 
   try {
     while (true) {
@@ -97,7 +133,7 @@ Future<void> runApp() async {
             } else {
               state.items.add(secret);
               state.message = "Добавлено: ${secret.name}";
-              await saveSecrets(state.items, vk);
+              await saveSecrets(state.items, state.vk);
             }
 
           case "q":

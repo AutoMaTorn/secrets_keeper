@@ -1,11 +1,13 @@
+import 'package:secrets_keeper/src/crypto.dart';
 import 'package:secrets_keeper/src/secret.dart';
 
 class AppState {
   final List<Secret> items;
+  final VaultKey vk;
   int selected = 0;
   String message = '';
 
-  AppState(this.items);
+  AppState(this.items, this.vk);
 
   Secret? get current => items.isEmpty ? null : items[selected];
 
