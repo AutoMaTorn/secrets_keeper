@@ -56,7 +56,7 @@ String defaultVaultPath() {
   if (Platform.isWindows) {
     base = env['APPDATA']!;
   } else if (Platform.isMacOS) {
-    base = p.join(env['HOME']!, 'Library', 'Appication Support');
+    base = p.join(env['HOME']!, 'Library', 'Application Support');
   } else {
     base = env["XDG_CONFIG_HOME"] ?? p.join(env['HOME']!, '.config');
   }
