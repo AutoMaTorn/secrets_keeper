@@ -9,15 +9,15 @@ import 'package:secrets_keeper/src/ui/console.dart';
 import 'package:secrets_keeper/src/ui/dialogs.dart';
 import 'package:secrets_keeper/src/ui/render.dart';
 
-Future<(VaultKey, List<Secret>)?> _unlock() async {
-  if (!await vaultExists()) {
+Future<(VaultKey, List<Secret>)?> _unlock(Vault vault) async {
+  if (!await vault.exists()) {
     final password = _askNewPassword();
     console.writeLine('Создаю хранилище...');
     final vk = await createVaultKey(password);
-    await saveSecrets([], vk);
+    await vault.save([], vk);
     return (vk, <Secret>[]);
   } else {
-    final content = await readVaultFile();
+    final content = await vault.read();
     final salt = readSalt(content);
 
     for (var attempt = 1; attempt <= 3; attempt++) {
@@ -26,7 +26,7 @@ Future<(VaultKey, List<Secret>)?> _unlock() async {
       final vk = await openVaultKey(password, salt);
 
       try {
-        final items = await loadSecrets(vk);
+        final items = await vault.load(vk);
         return (vk, items);
       } on SecretBoxAuthenticationError {
         console.writeLine("Неверный пароль...");
@@ -67,7 +67,7 @@ String _askPassword() {
   }
 }
 
-Future<void> deleteWithConfirm(AppState state) async {
+Future<void> deleteWithConfirm(AppState state, Vault vault) async {
   final current = state.current;
   if (current == null || !confirm('Удалить ${current.name}?')) {
     state.message = 'Удаление отменено';
@@ -75,11 +75,12 @@ Future<void> deleteWithConfirm(AppState state) async {
   }
   state.deleteSelected();
   state.message = 'Удалено: ${current.name}';
-  await saveSecrets(state.items, state.vk);
+  await state.vault.save(state.items, state.vk);
 }
 
 Future<void> runApp() async {
-  final unlocked = await _unlock();
+  final vault = Vault(defaultVaultPath());
+  final unlocked = await _unlock(vault);
 
   if (unlocked == null) {
     console.writeLine("Не удалось открыть хранилище");
@@ -89,7 +90,7 @@ Future<void> runApp() async {
 
   console.hideCursor();
 
-  final state = AppState(items, vk);
+  final state = AppState(items, vk, vault);
 
   try {
     while (true) {
@@ -107,7 +108,7 @@ Future<void> runApp() async {
               state.selected++;
             }
           case ControlCharacter.delete || ControlCharacter.backspace:
-            await deleteWithConfirm(state);
+            await deleteWithConfirm(state, vault);
           case ControlCharacter.enter:
             final current = state.current;
             if (current != null) {
@@ -125,7 +126,7 @@ Future<void> runApp() async {
       } else {
         switch (key.char) {
           case "d":
-            await deleteWithConfirm(state);
+            await deleteWithConfirm(state, vault);
           case "a":
             final secret = askNewSecret();
             if (secret == null) {
@@ -133,7 +134,7 @@ Future<void> runApp() async {
             } else {
               state.items.add(secret);
               state.message = "Добавлено: ${secret.name}";
-              await saveSecrets(state.items, state.vk);
+              await state.vault.save(state.items, state.vk);
             }
 
           case "q":
