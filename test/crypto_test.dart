@@ -145,4 +145,28 @@ void main() {
       });
     }
   });
+  group('повреждённый файл', () {
+    final cases = {
+      'пустая строка': '',
+      'обрезанный JSON': '{"version": 1, "salt": "AAA',
+      'список вместо объекта': '[]',
+      'неизвестная версия': '{"version": 2, "salt": "AA==", "nonce": "AA==", "cipherText": "AA==", "mac": "AA=="}',
+      'нет поля mac': '{"version": 1, "salt": "AA==", "nonce": "AA==", "cipherText": "AA=="}',
+      'поле не строка': '{"version": 1, "salt": 5, "nonce": "AA==", "cipherText": "AA==", "mac": "AA=="}',
+      'битый base64': '{"version": 1, "salt": "!!!", "nonce": "AA==", "cipherText": "AA==", "mac": "AA=="}',
+    };
+
+    for (final MapEntry(key: name, value: content) in cases.entries) {
+      test('readSalt: $name', () {
+        expect(() => readSalt(content), throwsA(isA<VaultFormatException>()));
+      });
+
+      test('decryptVault: $name', () async {
+        await expectLater(
+          decryptVault(content, sharedKey),
+          throwsA(isA<VaultFormatException>()),
+        );
+      });
+    }
+  });
 }

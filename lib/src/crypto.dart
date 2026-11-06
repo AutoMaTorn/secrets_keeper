@@ -11,6 +11,14 @@ class VaultKey {
   VaultKey(this.key, this.salt);
 }
 
+class VaultFormatException implements Exception {
+  final String message;
+  VaultFormatException(this.message);
+
+  @override
+  String toString() => 'VaultFormatException: $message';
+}
+
 Future<VaultKey> createVaultKey(String password) async {
   final salt = SecretKeyData.random(length: 16).bytes;
   final secretKey = await _deriveKeyFromPasswordArgon2(password, salt);
