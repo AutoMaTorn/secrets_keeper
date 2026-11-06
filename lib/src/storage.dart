@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
@@ -37,22 +38,26 @@ class Vault {
   }
 
   Future<void> save(List<Secret> items, VaultKey vk) async {
-    await Directory(p.dirname(path)).create(recursive: true);
+    final dir = await Directory(p.dirname(path)).create(recursive: true);
+    await _chmod('700', dir.path);
 
     final allSecrets = jsonEncode(items.map((item) => item.toJson()).toList());
     final encrypted = await encryptVault(allSecrets, vk);
 
     final file = File(path);
     final tmp = File('$path.tmp');
+    final bak = File('$path.bak');
 
+    await tmp.writeAsString('');
+    await _chmod('600', tmp.path);
     await tmp.writeAsString(encrypted, flush: true);
+
     if (await file.exists()) {
-      await file.copy('$path.bak');
+      await file.copy(bak.path);
+      await _chmod('600', bak.path);
     }
+
     await tmp.rename(path);
-    if (!Platform.isWindows) {
-      await Process.run('chmod', ['600', path]);
-    }
   }
 }
 
@@ -70,4 +75,15 @@ String defaultVaultPath() {
 
   final dir = Directory(p.join(base, _appFolder));
   return p.join(dir.path, _vaultFileName);
+}
+
+Future<void> _chmod(String mode, String path) async {
+  if (Platform.isWindows) return;
+  final result = await Process.run('chmod', [mode, path]);
+  if (result.exitCode != 0) {
+    throw FileSystemException(
+      'Не удалось изменить права: ${result.stderr}',
+      path,
+    );
+  }
 }
