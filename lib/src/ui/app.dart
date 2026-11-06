@@ -29,7 +29,7 @@ Future<(VaultKey, List<Secret>)?> _unlock(Vault vault) async {
         final items = await vault.load(vk);
         return (vk, items);
       } on SecretBoxAuthenticationError {
-        console.writeLine("Неверный пароль...");
+        console.writeLine("Неверный пароль. Осталось попыток ${3 - attempt}");
       }
     }
 
